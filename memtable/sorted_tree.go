@@ -12,6 +12,7 @@ type Tree struct {
 	root  *treeNode
 	Count int
 	lock  *sync.RWMutex
+	name  string //可以用于memtable和immemtable查找key时的顺序
 }
 
 type treeNode struct {
@@ -20,8 +21,9 @@ type treeNode struct {
 	Right *treeNode
 }
 
-func NewTree() *Tree {
+func NewTree(name string) *Tree {
 	return &Tree{
+		name:  name,
 		root:  nil,
 		Count: 0,
 		lock:  &sync.RWMutex{},

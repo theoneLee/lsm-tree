@@ -3,9 +3,12 @@ package wal
 import (
 	"bytes"
 	"encoding/binary"
+	"fmt"
 	"log"
 	"os"
 	"path"
+	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -23,16 +26,22 @@ WAL 需要具备两种能力：
 */
 
 type Wal struct {
-	name int64 // 从1开始。 name最大的为memtable wal，其余的为immemtable
-	f    *os.File
-	path string
+	//name int64 // 从1开始。 name最大的为memtable wal，其余的为immemtable
+	f    *os.File // memtable的wal
+	path string   // memtable的wal
 	lock *sync.Mutex
 
 	marsher kv.MarshalOp
 }
 
-// todo init wal。确定wal文件规则以及什么时候替换
+func New() *Wal {
+	w := &Wal{}
+	w.lock = &sync.Mutex{}
+	w.marsher = kv.Json{}
+	return w
+}
 
+// Write 将kv写入wal
 func (w *Wal) Write(val kv.Kv) error {
 	w.lock.Lock()
 	defer w.lock.Unlock()
@@ -56,23 +65,63 @@ func (w *Wal) Write(val kv.Kv) error {
 	return nil
 }
 
-// todo 从wal文件恢复。
-func (w *Wal) Init(dir string) memtable.MemtableOp {
+const walFileSuffix = ".wal.log" // wal文件最大的序号为memtable的wal，其余的为
+
+// 从wal文件恢复memtable。
+func (w *Wal) initMemtable(dir string) memtable.MemtableOp {
 	start := time.Now()
 	defer func() {
 		log.Println("Load wal cost:", time.Since(start))
 	}()
+	// 获取这个目录下最大序号的文件
+	walFileName := getMemtableFileName(dir)
 
-	walPath := path.Join(dir, "wal.log")
+	walPath := path.Join(dir, walFileName)
 	f, err := os.OpenFile(walPath, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
 	if err != nil {
 		panic(err)
 	}
 	w.f = f
 	w.path = walPath
-	w.lock = &sync.Mutex{}
-	w.marsher = kv.Json{}
 	return w.loadToMemory()
+}
+
+func getMemtableFileName(dir string) string {
+	files, err := os.ReadDir(dir)
+	if err != nil {
+		panic(err)
+	}
+	// 获取文件名最大的项目
+	if len(files) == 0 {
+		return "1" + walFileSuffix
+	}
+	memtableFile := files[0]
+	for i := 1; i < len(files); i++ {
+		if memtableFile.Name() < files[i].Name() {
+			memtableFile = files[i]
+		}
+	}
+	return memtableFile.Name()
+}
+
+func getImmemtableFileNames(dir string) []string {
+	memtableFileName := getMemtableFileName(dir)
+	memtableIndex := strings.ReplaceAll(memtableFileName, walFileSuffix, "")
+	_memtableIndex, err := strconv.Atoi(memtableIndex)
+	if err != nil {
+		panic(err)
+	}
+	immemtableFileNames := []string{}
+	// 检查是否存在_memtableIndex-1的文件
+	for i := _memtableIndex - 1; i > 0; i-- {
+		filename := fmt.Sprintf("%v%v", i, walFileSuffix)
+		_, err := os.Stat(filename)
+		if err != nil {
+			break
+		}
+		immemtableFileNames = append(immemtableFileNames, filename)
+	}
+	return immemtableFileNames
 }
 
 // 从wal文件上还原为一个memtable
@@ -80,9 +129,18 @@ func (w *Wal) loadToMemory() memtable.MemtableOp {
 	w.lock.Lock()
 	defer w.lock.Unlock()
 
-	info, _ := os.Stat(w.path)
+	path := w.path
+	f := w.f
+	marsher := w.marsher
+
+	return w.decode(path, f, marsher)
+}
+
+// 将wal文件decode为memtable或者immemtable
+func (w *Wal) decode(path string, f *os.File, marsher kv.MarshalOp) *memtable.Tree {
+	info, _ := os.Stat(path)
 	size := info.Size()
-	tree := memtable.NewTree()
+	tree := memtable.NewTree(path)
 	//首先读取文件开头的 8 个字节，确定第一个元素的字节数量 n，然后将 8 ~ (8+n) 范围中的二进制数据反序列化为treeNode
 	//（根据操作类型调用tree的Set或Delete方法，从而还原一个tree）
 	// 读取 (8+n) ~ (8+n)+8 位置的 8 个字节，以便确定下一个元素的数据长度，直到读完wal文件
@@ -91,21 +149,21 @@ func (w *Wal) loadToMemory() memtable.MemtableOp {
 		return tree
 	}
 
-	_, err := w.f.Seek(0, 0)
+	_, err := f.Seek(0, 0)
 	if err != nil {
 		panic(err)
 	}
 
 	// 文件指针移动到最后，以便追加
 	defer func() {
-		_, err := w.f.Seek(size-1, 0)
+		_, err := f.Seek(size-1, 0)
 		if err != nil {
 			panic(err)
 		}
 	}()
 
 	data := make([]byte, size)
-	_, err = w.f.Read(data) // 将wal全部读到data内存
+	_, err = f.Read(data) // 将wal全部读到data内存
 	if err != nil {
 		panic(err)
 	}
@@ -113,7 +171,6 @@ func (w *Wal) loadToMemory() memtable.MemtableOp {
 	dataLen := int64(0)
 	index := int64(0)
 	for index < size {
-		// todo 抽离为decode函数 ？
 		indexData := data[index : index+8]
 		buf := bytes.NewBuffer(indexData)
 		err := binary.Read(buf, binary.LittleEndian, &dataLen) // 将元素的长度写到dataLen（从将8byte的字节数组转为int64）
@@ -124,7 +181,7 @@ func (w *Wal) loadToMemory() memtable.MemtableOp {
 		index += 8
 		dataArea := data[index : index+dataLen]
 		var val kv.Kv
-		err = w.marsher.Unmarshal(dataArea, &val)
+		err = marsher.Unmarshal(dataArea, &val)
 		if err != nil {
 			panic(err)
 		}
@@ -139,4 +196,25 @@ func (w *Wal) loadToMemory() memtable.MemtableOp {
 	return tree
 }
 
-// todo 什么时候reset wal文件？
+func (w *Wal) Restore(dir string) (memtable.MemtableOp, []memtable.ImmemtableOp) {
+	var memt memtable.MemtableOp
+	var immemList []memtable.ImmemtableOp
+	memt = w.initMemtable(dir)
+	immemList = w.initImmemtable(dir)
+	return memt, immemList
+}
+
+func (w *Wal) initImmemtable(dir string) []memtable.ImmemtableOp {
+	var list []memtable.ImmemtableOp
+	files := getImmemtableFileNames(dir) // imm的文件名是从大到小的顺序的。即后续imm列表的key的内容是从新到旧的。
+	for _, file := range files {
+		walPath := path.Join(dir, file)
+		f, err := os.OpenFile(walPath, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
+		if err != nil {
+			panic(err)
+		}
+		tree := w.decode(walPath, f, w.marsher)
+		list = append(list, tree)
+	}
+	return list
+}
