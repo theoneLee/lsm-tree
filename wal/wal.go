@@ -23,6 +23,7 @@ WAL 需要具备两种能力：
 */
 
 type Wal struct {
+	name int64 // 从1开始。 name最大的为memtable wal，其余的为immemtable
 	f    *os.File
 	path string
 	lock *sync.Mutex

@@ -9,6 +9,7 @@ const (
 	Success                     // 查找成功
 )
 
+// Kv  todo 对应leveldb的blcok？
 type Kv struct {
 	Key     string
 	Value   []byte // 序列化后存入 使用 MarshalOp
