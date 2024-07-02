@@ -8,9 +8,9 @@ import (
 type ImmemtableOp interface {
 	Search(key string) (kv.Kv, kv.SearchResult)
 	GetValues() []kv.Kv
-	GetIndex() string
+	GetName() string
 }
 
-func New(m MemtableOp) ImmemtableOp {
+func NewImmemtable(m MemtableOp) ImmemtableOp {
 	return m
 }

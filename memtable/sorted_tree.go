@@ -12,7 +12,16 @@ type Tree struct {
 	root  *treeNode
 	Count int
 	lock  *sync.RWMutex
-	name  string //可以用于memtable和immemtable查找key时的顺序
+	name  string //wal文件的path。
+}
+
+const countLimit = 50
+
+func (tree *Tree) CheckCap() bool {
+	if tree.Count > countLimit {
+		return true
+	}
+	return false
 }
 
 type treeNode struct {
@@ -179,7 +188,7 @@ func (tree *Tree) GetValues() []kv.Kv {
 	return list
 }
 
-func (tree *Tree) GetIndex() string {
+func (tree *Tree) GetName() string {
 	return tree.name
 }
 

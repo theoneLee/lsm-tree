@@ -41,6 +41,10 @@ func New() *Wal {
 	return w
 }
 
+func (w *Wal) GetPath() string {
+	return w.path
+}
+
 // Write 将kv写入wal
 func (w *Wal) Write(val kv.Kv) error {
 	w.lock.Lock()

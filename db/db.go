@@ -32,7 +32,6 @@ func (d *Db) Init(dir string) *Db {
 	// 触发后台进程
 	d.DemonTask()
 	return d
-
 }
 
 func (d *Db) SetKv(val kv.Kv) error {
@@ -44,8 +43,8 @@ func (d *Db) SetKv(val kv.Kv) error {
 	if d.mem.CheckCap() {
 		d.lock.Lock()
 		d.w = d.w.Reset()
-		d.imm = memtable.NewImmemtable(d.mem)
-		d.mem = memtable.NewMemtable()
+		d.imm = append(d.imm, memtable.NewImmemtable(d.mem))
+		d.mem = memtable.NewMemtable(d.w.GetPath())
 		d.lock.Unlock()
 	}
 	return nil
@@ -60,8 +59,8 @@ func (d *Db) DeleteKv(val kv.Kv) error {
 	if d.mem.CheckCap() { // 如果memtable达到阈值，形成immemtable
 		d.lock.Lock()
 		d.w = d.w.Reset()
-		d.imm = memtable.NewImmemtable(d.mem)
-		d.mem = memtable.NewMemtable()
+		d.imm = append(d.imm, memtable.NewImmemtable(d.mem))
+		d.mem = memtable.NewMemtable(d.w.GetPath())
 		d.lock.Unlock()
 	}
 	return nil
@@ -75,9 +74,11 @@ func (d *Db) GetKv(key string) kv.Kv {
 		return res
 	}
 
-	res, result = d.imm.Search(key)
-	if result != kv.None {
-		return res
+	for _, imm := range d.imm { // 从新到旧遍历immemtable，然后进行二分查找
+		res, result = imm.Search(key)
+		if result != kv.None {
+			return res
+		}
 	}
 
 	res, result = d.sst.Search(key)
@@ -113,16 +114,13 @@ func (d *Db) demonTask() error {
 			return err
 		}
 		// 删除imm的wal
-		err = d.w.Delete(imm.GetIndex())
-		if err != nil {
-			return err
-		}
-		//删除 imm
-		err = d.imm.Delete()
+		err = d.w.Delete(imm.GetName())
 		if err != nil {
 			return err
 		}
 	}
+	//删除 imm
+	d.imm = []memtable.ImmemtableOp{}
 
 	levels := d.sst.CheckCompactLevels()
 	if len(levels) == 0 {

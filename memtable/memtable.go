@@ -10,5 +10,10 @@ type MemtableOp interface {
 	Set(key string, value []byte) (oldValue kv.Kv, hasOld bool)
 	Delete(key string) (oldValue kv.Kv, hasOld bool)
 	GetValues() []kv.Kv
-	GetIndex() string
+	GetName() string
+	CheckCap() bool // 检查memtable是否超过阈值
+}
+
+func NewMemtable(path string) MemtableOp {
+	return NewTree(path)
 }
