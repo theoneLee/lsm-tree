@@ -2,7 +2,23 @@ package sstable
 
 import (
 	"sync"
+
+	"lsmtree/kv"
+	"lsmtree/memtable"
 )
+
+// 默认实现是tableTree，todo 后续可以使用read through的方式增加cache的实现
+type TableTreeOp interface {
+	Search(key string) (kv.Kv, kv.SearchResult)
+	Insert(imm memtable.ImmemtableOp) error
+	CheckCompactLevels() []int
+	CompactLevel(level int) error
+}
+
+func BuildTableTree(path string) TableTreeOp {
+	// todo 从path读取所有sst文件，构建一个tableTree
+
+}
 
 /*
 SSTable 文件由 {level}.{index}.db 组成
@@ -22,8 +38,22 @@ type tableNode struct {
 	next  *tableNode
 }
 
-//todo
-// 1.当程序启动时，需要读取目录中所有的 SSTable 文件到 TableTree 中
-// 2.tabletree sstable的合并
-// 3.tabletree sstable的插入
-// 4.tabletree sstable的查找
+func (t TableTree) Search(key string) (kv.Kv, kv.SearchResult) {
+	//TODO implement me
+	panic("implement me")
+}
+
+func (t TableTree) Insert(imm memtable.ImmemtableOp) error {
+	//TODO implement me
+	panic("implement me")
+}
+
+func (t TableTree) CheckCompactLevels() []int {
+	//TODO implement me
+	panic("implement me")
+}
+
+func (t TableTree) CompactLevel(level int) error {
+	//TODO implement me
+	panic("implement me")
+}
