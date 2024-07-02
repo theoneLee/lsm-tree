@@ -43,7 +43,7 @@ func (d *Db) SetKv(val kv.Kv) error {
 	d.mem.Set(val.Key, val.Value)
 	if d.mem.CheckCap() {
 		d.lock.Lock()
-		d.w = New(d.w) // 如果d.w为nil，说明文件为1.wal 如果不为nil，说明文件名为d.w.name+1.wal
+		d.w = d.w.Reset()
 		d.imm = memtable.NewImmemtable(d.mem)
 		d.mem = memtable.NewMemtable()
 		d.lock.Unlock()
@@ -59,7 +59,7 @@ func (d *Db) DeleteKv(val kv.Kv) error {
 	d.mem.Delete(val.Key)
 	if d.mem.CheckCap() { // 如果memtable达到阈值，形成immemtable
 		d.lock.Lock()
-		d.w = New(d.w) // 如果d.w为nil，说明文件为1.wal 如果不为nil，说明文件名为d.w.name+1.wal
+		d.w = d.w.Reset()
 		d.imm = memtable.NewImmemtable(d.mem)
 		d.mem = memtable.NewMemtable()
 		d.lock.Unlock()

@@ -8,6 +8,7 @@ import (
 type ImmemtableOp interface {
 	Search(key string) (kv.Kv, kv.SearchResult)
 	GetValues() []kv.Kv
+	GetIndex() string
 }
 
 func New(m MemtableOp) ImmemtableOp {

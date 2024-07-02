@@ -179,6 +179,10 @@ func (tree *Tree) GetValues() []kv.Kv {
 	return list
 }
 
+func (tree *Tree) GetIndex() string {
+	return tree.name
+}
+
 func dfs(root *treeNode, list *[]kv.Kv) {
 	if root == nil {
 		return

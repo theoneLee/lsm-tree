@@ -26,9 +26,9 @@ WAL 需要具备两种能力：
 */
 
 type Wal struct {
-	//name int64 // 从1开始。 name最大的为memtable wal，其余的为immemtable
 	f    *os.File // memtable的wal
 	path string   // memtable的wal
+	dir  string
 	lock *sync.Mutex
 
 	marsher kv.MarshalOp
@@ -81,6 +81,7 @@ func (w *Wal) initMemtable(dir string) memtable.MemtableOp {
 	if err != nil {
 		panic(err)
 	}
+	w.dir = dir
 	w.f = f
 	w.path = walPath
 	return w.loadToMemory()
@@ -115,7 +116,7 @@ func getImmemtableFileNames(dir string) []string {
 	// 检查是否存在_memtableIndex-1的文件
 	for i := _memtableIndex - 1; i > 0; i-- {
 		filename := fmt.Sprintf("%v%v", i, walFileSuffix)
-		_, err := os.Stat(filename)
+		_, err := os.Stat(path.Join(dir, filename))
 		if err != nil {
 			break
 		}
@@ -218,3 +219,35 @@ func (w *Wal) initImmemtable(dir string) []memtable.ImmemtableOp {
 	}
 	return list
 }
+
+// Delete 删除wal文件
+func (w *Wal) Delete(filePath string) error {
+	w.lock.Lock()
+	defer w.lock.Unlock()
+	return os.Remove(filePath)
+}
+
+// Reset 创建一个新的wal供memtable使用
+func (w *Wal) Reset() *Wal {
+	w.lock.Lock()
+	defer w.lock.Unlock()
+
+	memtableFileName := getMemtableFileName(w.dir)
+	memtableIndex := strings.ReplaceAll(memtableFileName, walFileSuffix, "")
+	_memtableIndex, err := strconv.Atoi(memtableIndex)
+	if err != nil {
+		panic(err)
+	}
+	newIndex := _memtableIndex + 1
+	filename := fmt.Sprintf("%v%v", newIndex, walFileSuffix) //创建一个序号更大的wal文件
+	w.path = path.Join(w.dir, filename)
+
+	f, err := os.OpenFile(w.path, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
+	if err != nil {
+		panic(err)
+	}
+	w.f = f
+	return w
+}
+
+//todo 单测
