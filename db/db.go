@@ -24,7 +24,7 @@ type Db struct {
 // 程序启动时
 func (d *Db) Init(dir string) *Db {
 	// 构建tabletree
-	d.sst = sstable.BuildTableTree(path.Join(dir, "sst"))
+	d.sst = sstable.RestoreTableTree(path.Join(dir, "sst"))
 
 	d.w = wal.New()
 	d.mem, d.imm = d.w.Restore(path.Join(dir, "wal"))
@@ -82,7 +82,7 @@ func (d *Db) GetKv(key string) kv.Kv {
 		}
 	}
 
-	res, result = d.sst.Search(key) //todo 从tabletree上检索key
+	res, result = d.sst.Search(key) //从tabletree上检索key
 	if result != kv.None {
 		return res
 	}
@@ -110,7 +110,7 @@ func (d *Db) demonTask() error {
 	defer d.lock.Unlock()
 
 	for _, imm := range d.imm {
-		err := d.sst.Insert(imm) //todo 将imm转化为sst，放入tabletree管理
+		err := d.sst.Insert(imm) // 将imm转化为sst，放入tabletree管理
 		if err != nil {
 			return err
 		}
@@ -123,12 +123,12 @@ func (d *Db) demonTask() error {
 	//删除 imm
 	d.imm = []memtable.ImmemtableOp{}
 
-	levels := d.sst.CheckCompactLevels() //todo 检查是否触发sst合并
+	levels := d.sst.CheckCompactLevels() // 检查是否触发sst合并
 	if len(levels) == 0 {
 		return nil
 	}
 	for _, level := range levels {
-		err := d.sst.CompactLevel(level) //todo 将level的所有sst合并为一个sst后，放入level+1的tabletree上
+		err := d.sst.CompactLevel(level) // 将level的所有sst合并为一个sst后，放入level+1的tabletree上
 		if err != nil {
 			return err
 		}
