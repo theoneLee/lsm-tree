@@ -258,5 +258,3 @@ func (w *Wal) Reset() *Wal {
 	w.f = f
 	return w
 }
-
-//todo 单测
