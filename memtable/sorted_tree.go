@@ -182,7 +182,7 @@ func (tree *Tree) Delete(key string) (oldValue kv.Kv, hasOld bool) {
 func (tree *Tree) GetValues() []kv.Kv {
 	tree.lock.RLock()
 	defer tree.lock.RUnlock()
-	// 前序遍历
+	// 中序遍历，产生有序的数组
 	var list []kv.Kv
 	dfs(tree.root, &list)
 	return list
@@ -196,10 +196,8 @@ func dfs(root *treeNode, list *[]kv.Kv) {
 	if root == nil {
 		return
 	}
-	*list = append(*list, root.Val)
 	dfs(root.Left, list)
+	*list = append(*list, root.Val)
 	dfs(root.Right, list)
 	return
 }
-
-// todo 单测。验证这些实现

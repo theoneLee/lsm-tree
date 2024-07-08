@@ -77,6 +77,11 @@ func (w *Wal) initMemtable(dir string) memtable.MemtableOp {
 	defer func() {
 		log.Println("Load wal cost:", time.Since(start))
 	}()
+	//如果目录不存在，创建目录
+	err := os.MkdirAll(dir, 0755)
+	if err != nil {
+		panic(err)
+	}
 	// 获取这个目录下最大序号的文件
 	walFileName := getMemtableFileName(dir)
 
