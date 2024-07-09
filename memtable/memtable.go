@@ -11,7 +11,8 @@ type MemtableOp interface {
 	Delete(key string) (oldValue kv.Kv, hasOld bool)
 	GetValues() []kv.Kv
 	GetName() string
-	CheckCap() bool // 检查memtable是否超过阈值
+	CheckCap() bool     // 检查memtable是否超过阈值
+	Merge(o MemtableOp) // 将o合并到self指针
 }
 
 func NewMemtable(path string) MemtableOp {

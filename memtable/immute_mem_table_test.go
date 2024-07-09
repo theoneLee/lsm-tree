@@ -7,7 +7,7 @@ import (
 )
 
 func TestNewImmemtable(t *testing.T) {
-	tree := NewTree("1")
+	tree := NewMemtable("1")
 	imm := NewImmemtable(tree)
 	assert.NotNil(t, imm)
 }

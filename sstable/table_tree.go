@@ -1,6 +1,8 @@
 package sstable
 
 import (
+	"fmt"
+	"path"
 	"sync"
 
 	"lsmtree/kv"
@@ -15,16 +17,17 @@ type TableTreeOp interface {
 	CompactLevel(level int) error
 }
 
-func RestoreTableTree(path string) TableTreeOp {
-	// todo 从path读取所有sst文件，构建一个tableTree
-	tree := &TableTree{lock: &sync.Mutex{}}
+func RestoreTableTree(dir string) TableTreeOp {
+	// 从dir读取所有sst文件，构建一个tableTree
+	tree := &TableTree{lock: &sync.Mutex{}, sstDir: dir}
 	tree.lock.Lock()
 	defer tree.lock.Unlock()
 
 	sstPathList := get_sst_path_list() // 返回顺序需要排序 0.1.db 1.1.db 1.2.db 2.1.db
 	for _, sstPath := range sstPathList {
 		level, index := parse_sst_path(sstPath)
-		sst := RestoreSst(sstPath, index)
+		_ = index
+		sst := NewSst(sstPath)
 
 		// 构建sst，放入tree
 		if len(tree.levels) >= level {
@@ -32,7 +35,7 @@ func RestoreTableTree(path string) TableTreeOp {
 		} else {
 			node := &tableNode{
 				level: level,
-				table: []*SsTable{sst},
+				table: []SstOp{sst},
 			}
 			tree.levels = append(tree.levels, node)
 		}
@@ -49,6 +52,7 @@ SSTable 文件由 {level}.{index}.db 组成
 type TableTree struct {
 	levels []*tableNode // 存储N层 sstable链表
 	lock   sync.Locker
+	sstDir string
 }
 
 //// sstable链表
@@ -60,8 +64,10 @@ type TableTree struct {
 
 type tableNode struct {
 	level int
-	table []*SsTable
+	table []SstOp
 }
+
+const sstFileSuffix = ".db"
 
 func (t *TableTree) Search(key string) (kv.Kv, kv.SearchResult) {
 	// 优先先读新的sst。即level小，index大的
@@ -81,8 +87,18 @@ func (t *TableTree) Search(key string) (kv.Kv, kv.SearchResult) {
 func (t *TableTree) Insert(imm memtable.ImmemtableOp) error {
 	t.lock.Lock()
 	defer t.lock.Unlock()
-	sst := BuildSst()      // todo 参数
-	err := sst.Encode(imm) // todo 编码并写入sst.f
+	// 获取最大的level0的index，然后作为path
+	var name string
+	if len(t.levels) > 0 {
+		index := len(t.levels[0].table)
+		level := t.levels[0].level
+		name = fmt.Sprintf("%v.%v%v", level, index, sstFileSuffix)
+	} else {
+		name = fmt.Sprintf("%v.%v%v", 0, 0, sstFileSuffix)
+	}
+	sstPath := path.Join(t.sstDir, name)
+	sst := NewSst(sstPath)
+	err := sst.Encode(imm) //编码并写入sst.f
 	if err != nil {
 		return err
 	}
@@ -90,7 +106,7 @@ func (t *TableTree) Insert(imm memtable.ImmemtableOp) error {
 	if len(t.levels) == 0 {
 		node := &tableNode{
 			level: 0,
-			table: []*SsTable{sst},
+			table: []SstOp{sst},
 		}
 		t.levels = append(t.levels, node)
 		return nil
@@ -99,7 +115,7 @@ func (t *TableTree) Insert(imm memtable.ImmemtableOp) error {
 	return nil
 }
 
-// 每次允许的sstable个数，超过说明该层需要合并
+// 每次允许的sstable个数，超过说明该层需要合并 //todo 这里如何重构？
 var levelCountLimit = map[int]int{
 	0: 10,
 	1: 10,
@@ -131,24 +147,39 @@ func (t *TableTree) CompactLevel(level int) error {
 		return nil
 	}
 	tableLen := len(t.levels[level].table)
-	temp := &SsTable{ // todo 是否抽为new函数
-		f:             nil,
-		filePath:      "",
-		tableMetaInfo: MetaInfo{},
-		startPoints:   nil,
-		lock:          nil,
+
+	// 获取level+1的长度作为index
+	var name string
+	if len(t.levels) >= level+1 {
+		index := len(t.levels[level+1].table)
+		name = fmt.Sprintf("%v.%v%v", level+1, index, sstFileSuffix)
+	} else {
+		name = fmt.Sprintf("%v.%v%v", level+1, 0, sstFileSuffix)
 	}
+	sstPath := path.Join(t.sstDir, name)
+	temp := NewSst(sstPath)
+	tree := memtable.NewTree("")
 	for i := 0; i < tableLen; i++ {
 		sst := t.levels[level].table[i]
-		temp.Merge(sst) // todo 将sst的数据覆盖temp
+		o, err := sst.Decode()
+		if err != nil {
+			panic(err)
+		}
+		tree.Merge(o)
 	}
-	// todo 将temp作为下一个level的sst放入
+
+	// tree encode为sst
+	err := temp.Encode(tree) //编码并写入sst.f
+	if err != nil {
+		return err
+	}
+	//将temp作为下一个level的sst放入
 	if tableLen >= level+1 {
 		t.levels[level+1].table = append(t.levels[level+1].table, temp)
 	} else {
 		node := &tableNode{
 			level: 0,
-			table: []*SsTable{temp},
+			table: []SstOp{temp},
 		}
 		t.levels = append(t.levels, node)
 	}

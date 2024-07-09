@@ -188,6 +188,16 @@ func (tree *Tree) GetValues() []kv.Kv {
 	return list
 }
 
+func (tree *Tree) Merge(o MemtableOp) {
+	for _, item := range o.GetValues() {
+		if item.Deleted {
+			tree.Delete(item.Key)
+		} else {
+			tree.Set(item.Key, item.Value)
+		}
+	}
+}
+
 func (tree *Tree) GetName() string {
 	return tree.name
 }
