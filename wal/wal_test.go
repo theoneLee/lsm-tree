@@ -35,15 +35,23 @@ func TestWal(t *testing.T) {
 	err = wal.Write(kv.Kv{"1", []byte("1"), false})
 	assert.Nil(t, err)
 
+	wal = wal.Reset()
+	err = wal.Write(kv.Kv{"2", []byte("2"), false})
+	assert.Nil(t, err)
+
 	wal = New()
 	mem, imm := wal.Restore(dir)
-	assert.Equal(t, dir+"/2.wal.log", mem.GetName())
-	assert.Equal(t, []kv.Kv{{"1", []byte("1"), false}}, mem.GetValues())
+	assert.Equal(t, dir+"/3.wal.log", mem.GetName())
+	assert.Equal(t, []kv.Kv{{"2", []byte("2"), false}}, mem.GetValues())
 
-	assert.Equal(t, 1, len(imm))
-	assert.Equal(t, dir+"/1.wal.log", imm[0].GetName())
-	assert.Equal(t, []kv.Kv{{"1", []byte("1"), false}, {"2", nil, true}}, imm[0].GetValues())
+	assert.Equal(t, 2, len(imm))
+	assert.Equal(t, dir+"/2.wal.log", imm[0].GetName())
+	assert.Equal(t, []kv.Kv{{"1", []byte("1"), false}}, imm[0].GetValues())
 
+	assert.Equal(t, dir+"/1.wal.log", imm[1].GetName())
+	assert.Equal(t, []kv.Kv{{"1", []byte("1"), false}, {"2", nil, true}}, imm[1].GetValues())
+
+	// 验证删除wal的case
 	err = wal.Delete(imm[0].GetName())
 	assert.Nil(t, err)
 
