@@ -1,6 +1,7 @@
 package sstable
 
 import (
+	"bytes"
 	"encoding/binary"
 	"fmt"
 	"os"
@@ -19,14 +20,14 @@ type SstOp interface {
 
 // 元数据 描述了稀疏索引和数据区的位置。用于在字节数组上切分（编解码）
 type MetaInfo struct {
-	version int64
+	Version int64
 	// 数据区
-	dataStart int64
-	dataLen   int64
+	DataStart int64
+	DataLen   int64
 
 	// 稀疏索引区
-	pointStart int64
-	pointLen   int64
+	PointStart int64
+	PointLen   int64
 }
 
 // Position 元素定位，存储在稀疏索引区中，表示一个元素的起始位置和长度
@@ -58,7 +59,7 @@ func (s *SsTable) Decode() (memtable.MemtableOp, error) {
 	defer s.lock.Unlock()
 
 	// 将sst转化为memtable
-	var tree memtable.MemtableOp
+	tree := memtable.NewTree("")
 	s.restoreStartPoints()
 
 	for key, pos := range s.startPoints {
@@ -151,20 +152,37 @@ func (s *SsTable) Encode(imm memtable.ImmemtableOp) error {
 	}
 	start = start + spBytesLen
 
-	//   再写入元数据
+	//   再写入元数据,这里直接写40bytes，不需要序列化后再写入
 	info := MetaInfo{
-		version:    1,
-		dataStart:  0,
-		dataLen:    spStart - 1, // todo 这里需要验证下准确性
-		pointStart: spStart,
-		pointLen:   spBytesLen,
+		Version:    1,
+		DataStart:  0,
+		DataLen:    spStart - 1,
+		PointStart: spStart,
+		PointLen:   spBytesLen,
 	}
-	fmt.Printf("info:%#v", info)
-	infoByte, err := s.marsher.Marshal(info)
+	fmt.Printf("info:%#v \n", info)
+	version := info.Version
+	dataStart := info.DataStart
+	dataLen := info.DataLen
+	pointStart := info.PointStart
+	pointLen := info.PointLen
+	err = binary.Write(s.f, binary.LittleEndian, version)
 	if err != nil {
-		return errs.Newf(errs.ErrSstable, "Marshal err:%v", err)
+		return errs.Newf(errs.ErrSstable, "Write err:%v", err)
 	}
-	err = binary.Write(s.f, binary.LittleEndian, infoByte)
+	err = binary.Write(s.f, binary.LittleEndian, dataStart)
+	if err != nil {
+		return errs.Newf(errs.ErrSstable, "Write err:%v", err)
+	}
+	err = binary.Write(s.f, binary.LittleEndian, dataLen)
+	if err != nil {
+		return errs.Newf(errs.ErrSstable, "Write err:%v", err)
+	}
+	err = binary.Write(s.f, binary.LittleEndian, pointStart)
+	if err != nil {
+		return errs.Newf(errs.ErrSstable, "Write err:%v", err)
+	}
+	err = binary.Write(s.f, binary.LittleEndian, pointLen)
 	if err != nil {
 		return errs.Newf(errs.ErrSstable, "Write err:%v", err)
 	}
@@ -176,11 +194,11 @@ func (s *SsTable) restoreStartPoints() {
 	info := s.restoreMetaInfo()
 
 	// 从f 读取StartPoints
-	_, err := s.f.Seek(info.pointStart, 0)
+	_, err := s.f.Seek(info.PointStart, 0)
 	if err != nil {
 		panic(err)
 	}
-	data := make([]byte, info.pointLen)
+	data := make([]byte, info.PointLen)
 	_, err = s.f.Read(data) // 将StartPoints 对应的字节数据全部读到data内存
 	if err != nil {
 		panic(err)
@@ -207,11 +225,31 @@ func (s *SsTable) restoreMetaInfo() MetaInfo {
 	if err != nil {
 		panic(err)
 	}
-	info := MetaInfo{}
-	err = s.marsher.Unmarshal(data, &info)
+	//fmt.Printf("data:%s\n", data)
+
+	var version, dataStart, dataLen, pointStart, pointLen int64
+	buf := bytes.NewBuffer(data[0:8])
+	err = binary.Read(buf, binary.LittleEndian, &version)
+	buf = bytes.NewBuffer(data[8:16])
+	err = binary.Read(buf, binary.LittleEndian, &dataStart)
+	buf = bytes.NewBuffer(data[16:24])
+	err = binary.Read(buf, binary.LittleEndian, &dataLen)
+	buf = bytes.NewBuffer(data[24:32])
+	err = binary.Read(buf, binary.LittleEndian, &pointStart)
+	buf = bytes.NewBuffer(data[32:40])
+	err = binary.Read(buf, binary.LittleEndian, &pointLen)
+
 	if err != nil {
 		panic(err)
 	}
+	info := MetaInfo{
+		Version:    version,
+		DataStart:  dataStart,  //data[8:16],
+		DataLen:    dataLen,    //data[16:24],
+		PointStart: pointStart, //data[24:32],
+		PointLen:   pointLen,   //data[32:],
+	}
+
 	return info
 }
 

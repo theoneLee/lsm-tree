@@ -2,7 +2,11 @@ package sstable
 
 import (
 	"fmt"
+	"os"
 	"path"
+	"sort"
+	"strconv"
+	"strings"
 	"sync"
 
 	"lsmtree/kv"
@@ -23,14 +27,14 @@ func RestoreTableTree(dir string) TableTreeOp {
 	tree.lock.Lock()
 	defer tree.lock.Unlock()
 
-	sstPathList := get_sst_path_list() // 返回顺序需要排序 0.1.db 1.1.db 1.2.db 2.1.db
+	sstPathList := getSstPathList2(dir) // 返回顺序需要排序 0.1.db 1.1.db 1.2.db 2.1.db
 	for _, sstPath := range sstPathList {
-		level, index := parse_sst_path(sstPath)
+		level, index := parseSstPath(sstPath)
 		_ = index
 		sst := NewSst(sstPath)
 
 		// 构建sst，放入tree
-		if len(tree.levels) >= level {
+		if len(tree.levels) > level {
 			tree.levels[level].table = append(tree.levels[level].table, sst)
 		} else {
 			node := &tableNode{
@@ -41,6 +45,80 @@ func RestoreTableTree(dir string) TableTreeOp {
 		}
 	}
 	return tree
+}
+
+func getSstPathList(dir string) []string {
+	files, err := os.ReadDir(dir)
+	if err != nil {
+		panic(err)
+	}
+	type item struct {
+		level int
+		index int
+		path  string
+	}
+	var list []item
+	for _, file := range files {
+		name := file.Name()
+		level, index := parseSstPath(name)
+		list = append(list, item{
+			level: level,
+			index: index,
+			path:  path.Join(dir, name),
+		})
+	}
+	sort.Slice(list, func(i, j int) bool {
+		if list[i].level < list[j].level {
+			return true
+		}
+		if list[i].level > list[j].level {
+			return false
+		}
+		// 到这里说明level相等
+		if list[i].index < list[j].index {
+			return true
+		}
+		if list[i].index > list[j].index {
+			return false
+		}
+		return true
+	})
+	strs := []string{}
+	for _, i := range list {
+		strs = append(strs, i.path)
+	}
+	return strs
+}
+
+func getSstPathList2(dir string) []string {
+	files, err := os.ReadDir(dir)
+	if err != nil {
+		panic(err)
+	}
+	sort.Slice(files, func(i, j int) bool {
+		return files[i].Name() < files[j].Name() // 可以使用字符串直接比较，因为命名规则符合字符串的比较大小的要求。
+	})
+	list := []string{}
+	for _, file := range files {
+		list = append(list, path.Join(dir, file.Name()))
+	}
+	return list
+}
+
+func parseSstPath(sstPath string) (int, int) {
+	list := strings.Split(sstPath, ".")
+	if len(list) != 3 {
+		panic(fmt.Sprintf("sstPath:%v 不符合{level}.{index}.db", sstPath))
+	}
+	level, err := strconv.Atoi(list[0])
+	if err != nil {
+		panic(err)
+	}
+	index, err := strconv.Atoi(list[1])
+	if err != nil {
+		panic(err)
+	}
+	return level, index
 }
 
 /*
@@ -131,7 +209,7 @@ func (t *TableTree) CheckCompactLevels() []int {
 	// 检查每一层的个数是否超过阈值
 	var list []int
 	for i, sstList := range t.levels {
-		if len(sstList.table) > levelCountLimit[i] {
+		if len(sstList.table) > levelCountLimit[i] { // todo 这里判断标准是否合理？是否需要重构？
 			list = append(list, i)
 		}
 	}
