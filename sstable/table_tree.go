@@ -29,14 +29,22 @@ func RestoreTableTree(dir string) TableTreeOp {
 
 	sstPathList := getSstPathList2(dir) // 返回顺序需要排序 0.1.db 1.1.db 1.2.db 2.1.db
 	for _, sstPath := range sstPathList {
-		level, index := parseSstPath(sstPath)
+		level, index := parseSstPath(dir, sstPath)
 		_ = index
 		sst := NewSst(sstPath)
+		fmt.Println("level:", level)
 
 		// 构建sst，放入tree
 		if len(tree.levels) > level {
 			tree.levels[level].table = append(tree.levels[level].table, sst)
 		} else {
+			for i := 0; i < level; i++ { // 如果是1.0.db这种情况，需要在tree上先新增level为0的tableNode
+				node := &tableNode{
+					level: level,
+					table: []SstOp{},
+				}
+				tree.levels = append(tree.levels, node)
+			}
 			node := &tableNode{
 				level: level,
 				table: []SstOp{sst},
@@ -60,7 +68,7 @@ func getSstPathList(dir string) []string {
 	var list []item
 	for _, file := range files {
 		name := file.Name()
-		level, index := parseSstPath(name)
+		level, index := parseSstPath(dir, name)
 		list = append(list, item{
 			level: level,
 			index: index,
@@ -105,7 +113,8 @@ func getSstPathList2(dir string) []string {
 	return list
 }
 
-func parseSstPath(sstPath string) (int, int) {
+func parseSstPath(dir, sstPath string) (int, int) {
+	_, sstPath = path.Split(sstPath) // 移除dir，预期是1.0.db这样的文件名
 	list := strings.Split(sstPath, ".")
 	if len(list) != 3 {
 		panic(fmt.Sprintf("sstPath:%v 不符合{level}.{index}.db", sstPath))
@@ -228,7 +237,7 @@ func (t *TableTree) CompactLevel(level int) error {
 
 	// 获取level+1的长度作为index
 	var name string
-	if len(t.levels) >= level+1 {
+	if len(t.levels) > level+1 {
 		index := len(t.levels[level+1].table)
 		name = fmt.Sprintf("%v.%v%v", level+1, index, sstFileSuffix)
 	} else {
@@ -251,8 +260,9 @@ func (t *TableTree) CompactLevel(level int) error {
 	if err != nil {
 		return err
 	}
+
 	//将temp作为下一个level的sst放入
-	if tableLen >= level+1 {
+	if len(t.levels) > level+1 {
 		t.levels[level+1].table = append(t.levels[level+1].table, temp)
 	} else {
 		node := &tableNode{
@@ -261,5 +271,15 @@ func (t *TableTree) CompactLevel(level int) error {
 		}
 		t.levels = append(t.levels, node)
 	}
+
+	// 清理level层的sst。文件和内存
+	for _, sst := range t.levels[level].table {
+		err = sst.Delete()
+		if err != nil {
+			return err
+		}
+	}
+	t.levels[level].table = nil
+
 	return nil
 }

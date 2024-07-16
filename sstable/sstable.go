@@ -16,6 +16,7 @@ type SstOp interface {
 	Encode(imm memtable.ImmemtableOp) error
 	Search(key string) (kv.Kv, kv.SearchResult)
 	Decode() (memtable.MemtableOp, error)
+	Delete() error
 }
 
 // 元数据 描述了稀疏索引和数据区的位置。用于在字节数组上切分（编解码）
@@ -52,6 +53,13 @@ type SsTable struct {
 
 	lock    sync.Locker
 	marsher kv.MarshalOp
+}
+
+func (s *SsTable) Delete() error {
+	s.lock.Lock()
+	defer s.lock.Unlock()
+
+	return os.Remove(s.filePath)
 }
 
 func (s *SsTable) Decode() (memtable.MemtableOp, error) {
@@ -161,28 +169,23 @@ func (s *SsTable) Encode(imm memtable.ImmemtableOp) error {
 		PointLen:   spBytesLen,
 	}
 	fmt.Printf("info:%#v \n", info)
-	version := info.Version
-	dataStart := info.DataStart
-	dataLen := info.DataLen
-	pointStart := info.PointStart
-	pointLen := info.PointLen
-	err = binary.Write(s.f, binary.LittleEndian, version)
+	err = binary.Write(s.f, binary.LittleEndian, info.Version)
 	if err != nil {
 		return errs.Newf(errs.ErrSstable, "Write err:%v", err)
 	}
-	err = binary.Write(s.f, binary.LittleEndian, dataStart)
+	err = binary.Write(s.f, binary.LittleEndian, info.DataStart)
 	if err != nil {
 		return errs.Newf(errs.ErrSstable, "Write err:%v", err)
 	}
-	err = binary.Write(s.f, binary.LittleEndian, dataLen)
+	err = binary.Write(s.f, binary.LittleEndian, info.DataLen)
 	if err != nil {
 		return errs.Newf(errs.ErrSstable, "Write err:%v", err)
 	}
-	err = binary.Write(s.f, binary.LittleEndian, pointStart)
+	err = binary.Write(s.f, binary.LittleEndian, info.PointStart)
 	if err != nil {
 		return errs.Newf(errs.ErrSstable, "Write err:%v", err)
 	}
-	err = binary.Write(s.f, binary.LittleEndian, pointLen)
+	err = binary.Write(s.f, binary.LittleEndian, info.PointLen)
 	if err != nil {
 		return errs.Newf(errs.ErrSstable, "Write err:%v", err)
 	}

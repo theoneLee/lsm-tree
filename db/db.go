@@ -16,7 +16,7 @@ type Db struct {
 	mem memtable.MemtableOp
 	w   *wal.Wal
 	sst sstable.TableTreeOp
-	imm []memtable.ImmemtableOp //todo 后续imm列表是从新到旧排序的。后续查找imm时直接顺序查找即可。
+	imm []memtable.ImmemtableOp // 后续imm列表是从新到旧排序的。后续查找imm时直接顺序查找即可。
 
 	lock *sync.RWMutex //todo 保护memtable到immemtable，wal的删除，immemtable到sstable，sstable的合并。
 }
