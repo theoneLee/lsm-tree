@@ -8,9 +8,10 @@ import (
 type BaseError struct {
 	ErrStr string
 	Code   int
+	Err    error
 }
 
-func (e *BaseError) Error() string {
+func (e BaseError) Error() string {
 	return fmt.Sprintf("errorMsg:%s, code:%d", e.ErrStr, e.Code)
 }
 
@@ -58,11 +59,11 @@ var (
 
 // 外部只需要使用New和Newf即可
 
-func New(err BaseError) error {
+func New(err error) error {
 	return fmt.Errorf("%w", err)
 }
 
-func Newf(err BaseError, format string, args ...any) error {
+func Newf(err error, format string, args ...any) error {
 	format = format + ",:%w"
 	args = append(args, err)
 	return fmt.Errorf(format, args)

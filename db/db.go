@@ -18,7 +18,7 @@ type Db struct {
 	sst sstable.TableTreeOp
 	imm []memtable.ImmemtableOp // 后续imm列表是从新到旧排序的。后续查找imm时直接顺序查找即可。
 
-	lock *sync.RWMutex //todo 保护memtable到immemtable，wal的删除，immemtable到sstable，sstable的合并。
+	lock *sync.RWMutex // 保护memtable到immemtable，wal的删除，immemtable到sstable，sstable的合并。
 }
 
 // 程序启动时
@@ -135,3 +135,5 @@ func (d *Db) demonTask() error {
 	}
 	return nil
 }
+
+// todo 增加单测

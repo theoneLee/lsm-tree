@@ -14,7 +14,7 @@ import (
 )
 
 func Test_getSstPathList2(t *testing.T) {
-	dir := fmt.Sprintf("out/sst/path/%v", time.Now().Unix())
+	dir := fmt.Sprintf("out/sst/path2/%v", time.Now().Unix())
 	err := os.MkdirAll(dir, 0755)
 	if err != nil {
 		panic(err)
@@ -78,7 +78,7 @@ func Test_getSstPathList(t *testing.T) {
 }
 
 func TestTableTree_Insert_Search(t1 *testing.T) {
-	dir := fmt.Sprintf("out/sst/op/%v", time.Now().Unix())
+	dir := fmt.Sprintf("out/sst/op_search/%v", time.Now().Unix())
 	err := os.MkdirAll(dir, 0755)
 	if err != nil {
 		panic(err)
