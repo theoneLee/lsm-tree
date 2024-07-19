@@ -60,7 +60,12 @@ func (d *Db) SetKv(val kv.Kv) error {
 	return nil
 }
 
-func (d *Db) DeleteKv(val kv.Kv) error {
+func (d *Db) DeleteKv(key string) error {
+	val := kv.Kv{
+		Key:     key,
+		Value:   nil,
+		Deleted: true,
+	}
 	err := d.w.Write(val)
 	if err != nil {
 		return err
@@ -76,29 +81,29 @@ func (d *Db) DeleteKv(val kv.Kv) error {
 	return nil
 }
 
-func (d *Db) GetKv(key string) kv.Kv {
+func (d *Db) GetKv(key string) (kv.Kv, kv.SearchResult) {
 	d.lock.RLock()
 	defer d.lock.RUnlock()
 	res, result := d.mem.Search(key)
 	if result != kv.None {
 		log.Println("从mem获取key")
-		return res
+		return res, result
 	}
 
 	for _, imm := range d.imm { // 从新到旧遍历immemtable，然后进行二分查找
 		res, result = imm.Search(key)
 		if result != kv.None {
 			log.Println("从imm获取key")
-			return res
+			return res, result
 		}
 	}
 
 	res, result = d.sst.Search(key) //从tabletree上检索key
 	if result != kv.None {
 		log.Println("从sst获取key")
-		return res
+		return res, result
 	}
-	return kv.Kv{}
+	return kv.Kv{}, kv.None
 }
 
 // 后台进程

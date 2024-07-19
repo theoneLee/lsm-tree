@@ -1,6 +1,7 @@
 package memtable
 
 import (
+	"strconv"
 	"testing"
 	"time"
 
@@ -100,4 +101,38 @@ func TestTree_Delete(t *testing.T) {
 		{"6", nil, true},
 	}, tree.GetValues())
 
+}
+
+func TestTree_CheckCap(t *testing.T) {
+	tree := NewTree("1")
+	tree.Delete("91")
+	tree.GetName()
+	tree.Set("90", []byte("2"))
+	assert.Equal(t, false, tree.CheckCap())
+	for i := 0; i < 60; i++ {
+		tree.Set(strconv.Itoa(i), []byte("2"))
+	}
+	assert.Equal(t, true, tree.CheckCap())
+	for i := 0; i < 60; i++ {
+		tree.Set(strconv.Itoa(i), []byte("2"))
+	}
+
+	for i := 0; i < 60; i++ {
+		tree.Delete(strconv.Itoa(i))
+	}
+
+	assert.Equal(t, false, tree.CheckCap())
+}
+
+func TestTree_Merge(t *testing.T) {
+	tree := NewTree("1")
+	tree.Delete("91")
+
+	tree2 := NewTree("2")
+	tree2.Set("1", []byte("1"))
+	tree2.Set("91", []byte("1"))
+
+	tree.Merge(tree2)
+	expect := []kv.Kv{kv.Kv{Key: "1", Value: []byte("1"), Deleted: false}, kv.Kv{Key: "91", Value: []byte("1"), Deleted: false}}
+	assert.Equal(t, expect, tree.GetValues())
 }
