@@ -2,6 +2,7 @@ package db
 
 import (
 	"fmt"
+	"log"
 	"path"
 	"sync"
 	"time"
@@ -18,7 +19,8 @@ type Db struct {
 	sst sstable.TableTreeOp
 	imm []memtable.ImmemtableOp // 后续imm列表是从新到旧排序的。后续查找imm时直接顺序查找即可。
 
-	lock *sync.RWMutex // 保护memtable到immemtable，wal的删除，immemtable到sstable，sstable的合并。
+	lock   *sync.RWMutex // 保护memtable到immemtable，wal的删除，immemtable到sstable，sstable的合并。
+	stopCh chan struct{}
 }
 
 // 程序启动时
@@ -30,9 +32,15 @@ func (d *Db) Init(dir string) *Db {
 	d.mem, d.imm = d.w.Restore(path.Join(dir, "wal"))
 
 	d.lock = &sync.RWMutex{}
+	d.stopCh = make(chan struct{})
 	// 触发后台进程
 	d.DemonTask()
 	return d
+}
+
+func (d *Db) Shutdown() {
+	d.stopCh <- struct{}{}
+	d.demonTask()
 }
 
 func (d *Db) SetKv(val kv.Kv) error {
@@ -42,6 +50,7 @@ func (d *Db) SetKv(val kv.Kv) error {
 	}
 	d.mem.Set(val.Key, val.Value)
 	if d.mem.CheckCap() {
+		fmt.Printf("mem->imm,%v\n", d.mem.GetName())
 		d.lock.Lock()
 		d.w = d.w.Reset()
 		d.imm = append(d.imm, memtable.NewImmemtable(d.mem))
@@ -72,18 +81,21 @@ func (d *Db) GetKv(key string) kv.Kv {
 	defer d.lock.RUnlock()
 	res, result := d.mem.Search(key)
 	if result != kv.None {
+		log.Println("从mem获取key")
 		return res
 	}
 
 	for _, imm := range d.imm { // 从新到旧遍历immemtable，然后进行二分查找
 		res, result = imm.Search(key)
 		if result != kv.None {
+			log.Println("从imm获取key")
 			return res
 		}
 	}
 
 	res, result = d.sst.Search(key) //从tabletree上检索key
 	if result != kv.None {
+		log.Println("从sst获取key")
 		return res
 	}
 	return kv.Kv{}
@@ -96,10 +108,14 @@ func (d *Db) DemonTask() {
 		for {
 			select {
 			case <-ticker.C:
+				fmt.Println("DemonTask start")
 				err := d.demonTask()
 				if err != nil {
 					fmt.Printf("DemonTask err:%v", err)
 				}
+			case <-d.stopCh:
+				fmt.Println("DemonTask finish.")
+				return
 			}
 		}
 	}()
@@ -110,6 +126,7 @@ func (d *Db) demonTask() error {
 	defer d.lock.Unlock()
 
 	for _, imm := range d.imm {
+		fmt.Printf("imm->sst,%v\n", imm.GetName())
 		err := d.sst.Insert(imm) // 将imm转化为sst，放入tabletree管理
 		if err != nil {
 			return err
@@ -128,6 +145,7 @@ func (d *Db) demonTask() error {
 		return nil
 	}
 	for _, level := range levels {
+		fmt.Printf("compact sst[%v]->sst[%v] \n", level, level+1)
 		err := d.sst.CompactLevel(level) // 将level的所有sst合并为一个sst后，放入level+1的tabletree上
 		if err != nil {
 			return err

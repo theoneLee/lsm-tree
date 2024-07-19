@@ -78,9 +78,9 @@ type ErrCode int
 
 func RegisterModuleErr(moduleName string, customError map[ErrCode]Desc) {
 	for code, desc := range customError {
-		moduleCode := int(code / 1000)
+		moduleCode := int(code / 10000)
 		if moduleMap[moduleCode] != moduleName {
-			panic(fmt.Sprintf("请检查错误模块"))
+			panic(fmt.Sprintf("请检查错误模块,code:%v,moduleMap[moduleCode]:%v,moduleName:%v", code, moduleMap[moduleCode], moduleName))
 		}
 		errorDescription[code] = desc
 	}

@@ -32,7 +32,7 @@ func RestoreTableTree(dir string) TableTreeOp {
 		level, index := parseSstPath(dir, sstPath)
 		_ = index
 		sst := NewSst(sstPath)
-		fmt.Println("level:", level)
+		//fmt.Println("level:", level)
 
 		// 构建sst，放入tree
 		if len(tree.levels) > level {
@@ -101,6 +101,9 @@ func getSstPathList(dir string) []string {
 func getSstPathList2(dir string) []string {
 	files, err := os.ReadDir(dir)
 	if err != nil {
+		if strings.Contains(err.Error(), "no such file or directory") {
+			return nil
+		}
 		panic(err)
 	}
 	sort.Slice(files, func(i, j int) bool {
@@ -184,6 +187,7 @@ func (t *TableTree) Insert(imm memtable.ImmemtableOp) error {
 		name = fmt.Sprintf("%v.%v%v", 0, 0, sstFileSuffix)
 	}
 	sstPath := path.Join(t.sstDir, name)
+	os.MkdirAll(t.sstDir, 0755) //确保目录t.sstDir存在
 	sst := NewSst(sstPath)
 	err := sst.Encode(imm) //编码并写入sst.f
 	if err != nil {
