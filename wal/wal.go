@@ -52,19 +52,19 @@ func (w *Wal) Write(val kv.Kv) error {
 
 	data, err := w.marsher.Marshal(val)
 	if err != nil {
-		return errs.Newf(errs.ErrWal, "err:%v", err)
+		return errs.NewErr(errs.ErrCodeWal, fmt.Errorf("err:%v", err))
 	}
 
 	//先写入一个 8 字节，再将 Key/Value 序列化写入。
 	// [int64记录data长度, data]
 	err = binary.Write(w.f, binary.LittleEndian, int64(len(data)))
 	if err != nil {
-		return errs.Newf(errs.ErrWal, "err:%v", err)
+		return errs.NewErr(errs.ErrCodeWal, fmt.Errorf("err:%v", err))
 	}
 
 	err = binary.Write(w.f, binary.LittleEndian, data)
 	if err != nil {
-		return errs.Newf(errs.ErrWal, "err:%v", err)
+		return errs.NewErr(errs.ErrCodeWal, fmt.Errorf("err:%v", err))
 	}
 	return nil
 }

@@ -136,4 +136,4 @@ func (d *Db) demonTask() error {
 	return nil
 }
 
-// todo 增加单测
+// todo 增加单测 demonTask GetKv DeleteKv Init

@@ -1,70 +1,22 @@
 package errs
 
-import (
-	"errors"
-	"fmt"
-)
-
-type BaseError struct {
-	ErrStr string
-	Code   int
-	Err    error
-}
-
-func (e BaseError) Error() string {
-	return fmt.Sprintf("errorMsg:%s, code:%d", e.ErrStr, e.Code)
-}
-
-func FromError(err error) (code int, has bool) {
-	if target := (&BaseError{}); errors.As(err, &target) {
-		return target.Code, true
-	}
-
-	if err != nil {
-		// return unknown code
-		return 1, true
-	}
-
-	return -1, false
-}
-
 const (
-	ErrCodeUnknown = iota + 1 // 从1开始
+	// 100001为例 前两位10是模块的标识 后4位0001是该模块内部的详细错误码
+	ErrCodeUnknown ErrCode = iota + 100001
 	ErrCodeMarshal
 	ErrCodeMemtable
 	ErrCodeSstable
 	ErrCodeWal
 )
 
-var (
-	ErrUnknown = BaseError{
-		ErrStr: "unknown",
-		Code:   ErrCodeUnknown,
-	}
-
-	ErrMemtable = BaseError{
-		ErrStr: "",
-		Code:   ErrCodeMemtable,
-	}
-
-	ErrSstable = BaseError{
-		ErrStr: "",
-		Code:   ErrCodeSstable,
-	}
-	ErrWal = BaseError{
-		ErrStr: "",
-		Code:   ErrCodeWal,
-	}
-)
-
-// 外部只需要使用New和Newf即可
-
-func New(err error) error {
-	return fmt.Errorf("%w", err)
+var lsmTreeDescription = map[ErrCode]Desc{
+	ErrCodeUnknown:  {"内部未知错误", "unkonwn error"},
+	ErrCodeMarshal:  {"marshal错误", ""},
+	ErrCodeMemtable: {"memtable错误", ""},
+	ErrCodeSstable:  {"sstable错误", ""},
+	ErrCodeWal:      {"wal错误", ""},
 }
 
-func Newf(err error, format string, args ...any) error {
-	format = format + ",:%w"
-	args = append(args, err)
-	return fmt.Errorf(format, args)
+func init() {
+	RegisterModuleErr("lsmtree", lsmTreeDescription)
 }

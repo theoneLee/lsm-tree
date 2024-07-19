@@ -130,7 +130,7 @@ func (s *SsTable) Encode(imm memtable.ImmemtableOp) error {
 	for _, item := range imm.GetValues() {
 		itemByte, err := s.marsher.Marshal(item)
 		if err != nil {
-			return errs.Newf(errs.ErrSstable, "marshal err:%v", err)
+			return errs.NewErr(errs.ErrCodeSstable, fmt.Errorf("marshal err:%v", err))
 		}
 		itemByteLen := len(itemByte)
 		sp[item.Key] = Position{
@@ -141,7 +141,7 @@ func (s *SsTable) Encode(imm memtable.ImmemtableOp) error {
 
 		err = binary.Write(s.f, binary.LittleEndian, itemByte)
 		if err != nil {
-			return errs.Newf(errs.ErrSstable, "Write err:%v", err)
+			return errs.NewErr(errs.ErrCodeSstable, fmt.Errorf("Write err:%v", err))
 		}
 
 		start = start + int64(itemByteLen)
@@ -150,13 +150,13 @@ func (s *SsTable) Encode(imm memtable.ImmemtableOp) error {
 	//   再序列化startPoints，写入索引区
 	spBytes, err := s.marsher.Marshal(sp)
 	if err != nil {
-		return errs.Newf(errs.ErrSstable, "Marshal err:%v", err)
+		return errs.NewErr(errs.ErrCodeSstable, err)
 	}
 	spStart := start
 	spBytesLen := int64(len(spBytes))
 	err = binary.Write(s.f, binary.LittleEndian, spBytes)
 	if err != nil {
-		return errs.Newf(errs.ErrSstable, "Write err:%v", err)
+		return errs.NewErr(errs.ErrCodeSstable, fmt.Errorf("Write err:%v", err))
 	}
 	start = start + spBytesLen
 
@@ -171,23 +171,23 @@ func (s *SsTable) Encode(imm memtable.ImmemtableOp) error {
 	fmt.Printf("info:%#v \n", info)
 	err = binary.Write(s.f, binary.LittleEndian, info.Version)
 	if err != nil {
-		return errs.Newf(errs.ErrSstable, "Write err:%v", err)
+		return errs.NewErr(errs.ErrCodeSstable, fmt.Errorf("Write err:%v", err))
 	}
 	err = binary.Write(s.f, binary.LittleEndian, info.DataStart)
 	if err != nil {
-		return errs.Newf(errs.ErrSstable, "Write err:%v", err)
+		return errs.NewErr(errs.ErrCodeSstable, fmt.Errorf("Write err:%v", err))
 	}
 	err = binary.Write(s.f, binary.LittleEndian, info.DataLen)
 	if err != nil {
-		return errs.Newf(errs.ErrSstable, "Write err:%v", err)
+		return errs.NewErr(errs.ErrCodeSstable, fmt.Errorf("Write err:%v", err))
 	}
 	err = binary.Write(s.f, binary.LittleEndian, info.PointStart)
 	if err != nil {
-		return errs.Newf(errs.ErrSstable, "Write err:%v", err)
+		return errs.NewErr(errs.ErrCodeSstable, fmt.Errorf("Write err:%v", err))
 	}
 	err = binary.Write(s.f, binary.LittleEndian, info.PointLen)
 	if err != nil {
-		return errs.Newf(errs.ErrSstable, "Write err:%v", err)
+		return errs.NewErr(errs.ErrCodeSstable, fmt.Errorf("Write err:%v", err))
 	}
 
 	return nil
