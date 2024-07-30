@@ -20,4 +20,8 @@ func TestBloomFilter(t *testing.T) {
 	assert.Equal(t, false, bf.MayContain([]byte("11")))
 	assert.Equal(t, false, bf.MayContain([]byte("13")))
 	assert.Equal(t, false, bf.MayContain([]byte("12")))
+
+	bf.Insert([]byte("13"))
+	assert.Equal(t, true, bf.MayContain([]byte("13")))
+
 }
